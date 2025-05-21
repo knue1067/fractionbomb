@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>분수 폭탄 해제 작전</title>
+  <style>
+    body {
+      font-family: "Arial", sans-serif;
+      background: #fef3c7;
+      text-align: center;
+      padding: 50px;
+    }
+    #game-area {
+      margin-top: 30px;
+    }
+    .fraction {
+      font-size: 36px;
+      margin: 10px;
+    }
+    .drop-zone {
+      display: inline-block;
+      width: 60px;
+      height: 40px;
+      border: 2px dashed #aaa;
+      margin: 5px;
+      vertical-align: middle;
+      font-size: 24px;
+      line-height: 40px;
+      background: #fff;
+    }
+    .block {
+      display: inline-block;
+      padding: 8px 12px;
+      margin: 5px;
+      background: #fbbf24;
+      border-radius: 8px;
+      cursor: grab;
+      font-size: 20px;
+    }
+    #fuse-container {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 10px;
+      margin: 20px auto;
+    }
+    .bomb-skin {
+      display: flex;
+      align-items: center;
+      background: #333;
+      padding: 10px 15px;
+      border-radius: 12px;
+      box-shadow: 0 0 10px #000;
+      color: white;
+    }
+    .bomb-display {
+      font-family: 'Courier New', monospace;
+      background: #111;
+      color: #0f0;
+      font-size: 18px;
+      padding: 4px 10px;
+      margin-right: 10px;
+      border-radius: 4px;
+    }
+    #fuse {
+      width: 200px;
+      height: 20px;
+      background: linear-gradient(to right, red, orange, yellow);
+      border-radius: 10px;
+      position: relative;
+      overflow: hidden;
+    }
+    #fuse-progress {
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      background-color: #fef3c7;
+      width: 0%;
+      transition: width 1s linear;
+    }
+    #flame {
+      position: absolute;
+      width: 20px;
+      height: 20px;
+      background: radial-gradient(circle, orange 40%, red 60%, transparent 70%);
+      border-radius: 50%;
+      top: -5px;
+      left: 0;
+      animation: flicker 0.3s infinite alternate;
+    }
+    #bomb-icon {
+      font-size: 24px;
+      margin-left: 10px;
+    }
+    @keyframes flicker {
+      from { transform: scale(1); opacity: 1; }
+      to { transform: scale(1.2); opacity: 0.6; }
+    }
+    @keyframes pulse {
+      0% { background-color: #fee2e2; }
+      50% { background-color: #fecaca; }
+      100% { background-color: #fee2e2; }
+    }
+  </style>
+</head>
+<body>
+  <h1>💣 분수 폭탄 해제 작전 💣</h1>
+  <p>드래그해서 각 분수를 공통분모로 바꿔 보세요!</p>
+
+  <div id="fuse-container">
+    <div class="bomb-skin">
+      <div class="bomb-display" style="background: #111; color: #0ff; margin-right: 10px;">해체한 폭탄 수: <span id="score-display">0</span></div>
+      <div class="bomb-display">남은 시간</div>
+      <div id="fuse">
+        <div id="fuse-progress"></div>
+        <div id="flame"></div>
+      </div>
+      <div id="bomb-icon">💣</div>
+    </div>
+  </div>
+
+  <div id="game-area">
+    <div id="boss-warning" style="display:none; font-size: 22px; color: red; font-weight: bold; margin-bottom: 15px; line-height: 1.5;">
+      !!보스 스테이지!!<br>!!큰 수에 주의하세요!!
+    </div>
+    <div>
+      <div style="display:inline-block; text-align:center;">
+        <div class="fraction" id="fraction1_num"></div>
+        <hr style="width:40px; margin:2px auto;">
+        <div class="fraction" id="fraction1_den"></div>
+      </div>
+      <span style="font-size:24px; margin:0 10px;">→</span>
+      <div style="display:inline-block; text-align:center;">
+        <div class="drop-zone" id="f1_num" ondrop="drop(event)" ondragover="allowDrop(event)"></div>
+        <hr style="width:40px; margin:2px auto;">
+        <div class="drop-zone" id="f1_den" ondrop="drop(event)" ondragover="allowDrop(event)"></div>
+      </div>
+    </div>
+    <br>
+    <div>
+      <div style="display:inline-block; text-align:center;">
+        <div class="fraction" id="fraction2_num"></div>
+        <hr style="width:40px; margin:2px auto;">
+        <div class="fraction" id="fraction2_den"></div>
+      </div>
+      <span style="font-size:24px; margin:0 10px;">→</span>
+      <div style="display:inline-block; text-align:center;">
+        <div class="drop-zone" id="f2_num" ondrop="drop(event)" ondragover="allowDrop(event)"></div>
+        <hr style="width:40px; margin:2px auto;">
+        <div class="drop-zone" id="f2_den" ondrop="drop(event)" ondragover="allowDrop(event)"></div>
+      </div>
+    </div>
+
+    <div id="options"></div>
+    <br>
+    <button onclick="checkAnswer()" style="padding: 10px 20px; font-size: 18px; background-color: #4ade80; border: none; border-radius: 8px; cursor: pointer;">💣 폭탄 해제!</button>
+    <div id="feedback" style="font-size: 20px; margin-top: 15px; height: 30px;"></div>
+  </div>
+
+  <script>
+    let stage = 1;
+    let score = 0;
+    let currentFraction;
+    let timerInterval;
+    let gameOver = false;
+
+    function allowDrop(ev) { ev.preventDefault(); }
+    function drag(ev) { ev.dataTransfer.setData("text", ev.target.id); }
+    function drop(ev) {
+      ev.preventDefault();
+      const data = ev.dataTransfer.getData("text");
+      const block = document.getElementById(data);
+      ev.target.textContent = block.getAttribute("data-value");
+      ev.target.setAttribute("data-value", block.getAttribute("data-value"));
+    }
+
+    function generateFraction(stage) {
+      const isBossStage = [10, 15, 20, 25, 30].includes(stage);
+      let minLCM = 1, maxLCM = 50;
+
+      if (isBossStage) {
+        minLCM = 50;
+        maxLCM = 100;
+      } else if (stage >= 1 && stage <= 3) {
+        minLCM = 1;
+        maxLCM = 9;
+      } else if (stage >= 4 && stage <= 7) {
+        minLCM = 10;
+        maxLCM = 20;
+      } else if (stage === 8 || stage === 9) {
+        minLCM = 21;
+        maxLCM = 30;
+      }
+
+      const maxDen = Math.min(12 + stage, 30);
+      let den1, den2, num1, num2, targetLCM;
+      const gcd = (a, b) => b === 0 ? a : gcd(b, a % b);
+      const lcm = (a, b) => (a * b) / gcd(a, b);
+
+      do {
+        den1 = Math.floor(Math.random() * (maxDen - 2)) + 2;
+        do {
+          den2 = Math.floor(Math.random() * (maxDen - 2)) + 2;
+        } while (den2 === den1);
+        targetLCM = lcm(den1, den2);
+      } while (targetLCM < minLCM || targetLCM > maxLCM);
+
+      num1 = Math.floor(Math.random() * (den1 - 1)) + 1;
+      num2 = Math.floor(Math.random() * (den2 - 1)) + 1;
+
+      return { num1, den1, num2, den2 };
+    }
+
+    function getFractionForStage(stage) {
+      return generateFraction(stage);
+    }
+
+    function showFractions(fraction) {
+      document.getElementById("fraction1_num").textContent = fraction.num1;
+      document.getElementById("fraction1_den").textContent = fraction.den1;
+      document.getElementById("fraction2_num").textContent = fraction.num2;
+      document.getElementById("fraction2_den").textContent = fraction.den2;
+    }
+
+    function createOptions(fraction) {
+      const gcd = (a, b) => b === 0 ? a : gcd(b, a % b);
+      const lcm = (a, b) => (a * b) / gcd(a, b);
+      const targetDen = lcm(fraction.den1, fraction.den2);
+      const options = [
+        fraction.num1 * (targetDen / fraction.den1),
+        fraction.num2 * (targetDen / fraction.den2),
+        targetDen
+      ];
+      while (options.length < 6) {
+        const n = Math.floor(Math.random() * (targetDen + 5)) + 1;
+        if (!options.includes(n)) options.push(n);
+      }
+      options.sort(() => Math.random() - 0.5);
+      const container = document.getElementById("options");
+      container.innerHTML = "";
+      options.forEach((val, i) => {
+        const el = document.createElement("div");
+        el.className = "block";
+        el.id = `opt${i}`;
+        el.textContent = val;
+        el.setAttribute("draggable", "true");
+        el.setAttribute("data-value", val);
+        el.ondragstart = drag;
+        container.appendChild(el);
+      });
+    }
+
+    function clearDropZones() {
+      ["f1_num", "f1_den", "f2_num", "f2_den"].forEach(id => {
+        const el = document.getElementById(id);
+        el.textContent = "";
+        el.removeAttribute("data-value");
+      });
+    }
+
+    function startTimer(duration) {
+      let timeLeft = duration;
+      const fuseProgress = document.getElementById("fuse-progress");
+      const flame = document.getElementById("flame");
+      if (timerInterval) clearInterval(timerInterval);
+      fuseProgress.style.width = "0%";
+      flame.style.left = "0px";
+      timerInterval = setInterval(() => {
+        timeLeft--;
+        const percent = ((duration - timeLeft) / duration) * 100;
+        fuseProgress.style.width = percent + "%";
+        flame.style.left = percent * 2 + "px";
+        if (timeLeft <= 0) {
+          clearInterval(timerInterval);
+          gameOver = true;
+          document.getElementById("feedback").textContent = "💥 시간 초과! 폭탄이 터졌어요!";
+          document.querySelector("button[onclick='checkAnswer()']").disabled = true;
+          createRetryButton();
+        }
+      }, 1000);
+    }
+
+    function createRetryButton() {
+      const btn = document.createElement("button");
+      btn.textContent = "다시 도전하기";
+      btn.style = "padding: 10px 20px; margin-top: 15px; font-size: 16px; background-color: #f87171; color: white; border: none; border-radius: 8px; cursor: pointer;";
+      btn.onclick = () => {
+        gameOver = false;
+        btn.remove();
+        document.querySelector("button[onclick='checkAnswer()']").disabled = false;
+        loadStage(stage);
+      };
+      document.getElementById("game-area").appendChild(btn);
+    }
+
+    function loadStage(stage) {
+      const bossWarning = document.getElementById("boss-warning");
+      const isBossStage = [10, 15, 20, 25, 30].includes(stage);
+      const timerDuration = isBossStage ? 60 : 30;
+      const body = document.body;
+      if (isBossStage) {
+        bossWarning.style.display = 'block';
+        body.style.background = '#fee2e2';
+        body.style.animation = 'pulse 1s infinite';
+      } else {
+        bossWarning.style.display = 'none';
+        body.style.background = '#fef3c7';
+        body.style.animation = 'none';
+      }
+      currentFraction = getFractionForStage(stage);
+      showFractions(currentFraction);
+      createOptions(currentFraction);
+      clearDropZones();
+      startTimer(timerDuration);
+    }
+
+    function checkAnswer() {
+      if (gameOver) return;
+      const getValue = id => parseInt(document.getElementById(id).getAttribute("data-value"));
+      const f1n = getValue("f1_num");
+      const f1d = getValue("f1_den");
+      const f2n = getValue("f2_num");
+      const f2d = getValue("f2_den");
+      const feedback = document.getElementById("feedback");
+
+      if ([f1n, f1d, f2n, f2d].some(isNaN)) {
+        feedback.textContent = "⚠️ 모든 칸에 숫자를 넣어주세요!";
+        return;
+      }
+
+      const gcd = (a, b) => b === 0 ? a : gcd(b, a % b);
+      const lcm = (a, b) => (a * b) / gcd(a, b);
+      const targetDen = lcm(currentFraction.den1, currentFraction.den2);
+
+      const expected1 = currentFraction.num1 * (targetDen / currentFraction.den1);
+      const expected2 = currentFraction.num2 * (targetDen / currentFraction.den2);
+
+      if (f1n === expected1 && f1d === targetDen && f2n === expected2 && f2d === targetDen) {
+        score++;
+        document.getElementById("score-display").textContent = score;
+        feedback.textContent = "🎉 정답입니다! 다음 문제로 넘어갑니다.";
+        stage++;
+        setTimeout(() => {
+          feedback.textContent = "";
+          loadStage(stage);
+        }, 1000);
+      } else {
+        feedback.textContent = "❌ 오답입니다. 다시 시도해 보세요!";
+      }
+    }
+
+    loadStage(stage);
+  </script>
+</body>
+</html>
